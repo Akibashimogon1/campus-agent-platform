@@ -1,0 +1,11 @@
+mcp:
+  internal:
+    require-service-key: true
+  execution:
+    mode: ${MCP_EXECUTION_MODE:http}
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

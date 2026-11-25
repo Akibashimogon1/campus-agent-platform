@@ -1,0 +1,19 @@
+mcp:
+  internal:
+    require-service-key: ${MCP_INTERNAL_REQUIRE_SERVICE_KEY:false}
+  execution:
+    mode: ${MCP_EXECUTION_MODE:mock}
+  dev:
+    allow-tenant-header: true
+
+spring:
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql,classpath:schema-dev.sql
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true

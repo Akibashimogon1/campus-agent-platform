@@ -1,0 +1,32 @@
+# Maven build output
+/target/
+**/target/
+*.class
+*.jar
+*.war
+
+# Frontend build and dependencies
+/frontend/node_modules/
+/frontend/dist/
+/frontend/dist-ssr/
+*.local
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+/backend-run.log
+/backend-run.log.err
+
+# IDE and OS files
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+*.suo
+
+# Local environment secrets
+/.env
+
+# Internal modernization tooling
+.github/modernize/
