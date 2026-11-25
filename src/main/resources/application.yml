@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5432/campus_agent}
+    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5432/campus_agent?stringtype=unspecified}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver

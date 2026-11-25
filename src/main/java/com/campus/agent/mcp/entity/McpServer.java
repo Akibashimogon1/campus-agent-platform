@@ -13,7 +13,7 @@ import java.util.Map;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("mcp_server")
+@TableName(value = "mcp_server", autoResultMap = true)
 public class McpServer extends BaseTenantEntity {
 
     @TableId(type = IdType.AUTO)

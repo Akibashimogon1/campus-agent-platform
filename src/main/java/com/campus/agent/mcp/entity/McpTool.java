@@ -12,7 +12,7 @@ import java.util.Map;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("mcp_tool")
+@TableName(value = "mcp_tool", autoResultMap = true)
 public class McpTool extends BaseTenantEntity {
 
     @TableId(type = IdType.AUTO)
