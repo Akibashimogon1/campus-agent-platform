@@ -1,63 +1,48 @@
 import axios from 'axios'
-import { ElLoading, ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { useAuthStore } from '../stores/auth'
+import { normalizeHttpError, normalizeBusinessResponse } from './httpError'
 
 const request = axios.create({
   baseURL: '/api/v1/mcp',
   timeout: 15000,
 })
 
-let loadingInstance = null
-let loadingRequestCount = 0
-
-/** 显示全局加载遮罩。并发请求结束后再关闭。 */
-function showLoading() {
-  loadingRequestCount += 1
-  if (!loadingInstance) {
-    loadingInstance = ElLoading.service({
-      lock: true,
-      text: '正在加载...',
-      background: 'rgba(255, 255, 255, 0.72)',
-    })
-  }
-}
-
-/** 隐藏全局加载遮罩。 */
-function hideLoading() {
-  loadingRequestCount = Math.max(0, loadingRequestCount - 1)
-  if (loadingRequestCount === 0 && loadingInstance) {
-    loadingInstance.close()
-    loadingInstance = null
-  }
-}
-
 request.interceptors.request.use(
   (config) => {
-    showLoading()
+    const token = localStorage.getItem('mcp_access_token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
     return config
   },
   (error) => {
-    hideLoading()
-    return Promise.reject(error)
+    const normalized = normalizeHttpError(error)
+    ElMessage.error(normalized.message)
+    return Promise.reject(normalized)
   },
 )
 
 request.interceptors.response.use(
   (response) => {
-    hideLoading()
     const result = response.data
     if (result?.code !== 'SUCCESS') {
-      ElMessage.error(result?.message || '请求失败')
-      return Promise.reject(new Error(result?.message || '请求失败'))
+      const normalized = normalizeBusinessResponse(result)
+      ElMessage.error(normalized.message)
+      return Promise.reject(normalized)
     }
     return result.data
   },
   (error) => {
-    hideLoading()
-    const message = error.response?.data?.message
-      || error.message
-      || '网络请求失败'
-    ElMessage.error(message)
-    return Promise.reject(error)
+    const normalized = normalizeHttpError(error)
+    if (normalized.status === 401) {
+      useAuthStore().clearSession()
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login')
+      }
+    }
+    ElMessage.error(normalized.message)
+    return Promise.reject(normalized)
   },
 )
 

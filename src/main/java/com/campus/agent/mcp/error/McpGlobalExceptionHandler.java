@@ -2,6 +2,7 @@ package com.campus.agent.mcp.error;
 
 import com.campus.agent.mcp.api.McpApiResponse;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +24,12 @@ public class McpGlobalExceptionHandler {
     @ExceptionHandler(McpBusinessException.class)
     public ResponseEntity<McpApiResponse<Void>> handleBusinessException(McpBusinessException exception) {
         return response(exception.getErrorCode(), exception.getMessage());
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<McpApiResponse<Void>> handleBadCredentials(BadCredentialsException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(McpApiResponse.error(McpErrorCode.TENANT_CONTEXT_MISSING, "用户名或密码错误"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -44,18 +52,18 @@ public class McpGlobalExceptionHandler {
 
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ResponseEntity<McpApiResponse<Void>> handleMethodValidation(HandlerMethodValidationException exception) {
-        return response(McpErrorCode.VALIDATION_ERROR, "Request parameters are invalid");
+        return response(McpErrorCode.VALIDATION_ERROR, "请求参数不合法");
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<McpApiResponse<Void>> handleUnreadableMessage(HttpMessageNotReadableException exception) {
-        return response(McpErrorCode.INVALID_REQUEST, "Request body is missing or malformed");
+        return response(McpErrorCode.INVALID_REQUEST, "请求体缺失或格式错误");
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<McpApiResponse<Void>> handleUnexpectedException(Exception exception) {
         LOGGER.error("Unhandled MCP API exception", exception);
-        return response(McpErrorCode.INTERNAL_ERROR, "An unexpected error occurred");
+        return response(McpErrorCode.INTERNAL_ERROR, "服务器内部异常，请稍后重试");
     }
 
     private String formatFieldError(FieldError error) {

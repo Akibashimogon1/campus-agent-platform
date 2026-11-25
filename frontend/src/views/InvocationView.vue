@@ -7,6 +7,7 @@ const records = ref([])
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
+const requestError = ref('')
 
 /** 根据调用状态返回 Tag 类型。 */
 function statusType(status) {
@@ -32,6 +33,7 @@ function formatTime(value) {
 /** 加载调用记录分页列表。 */
 async function loadInvocations() {
   loading.value = true
+  requestError.value = ''
   try {
     const result = await mcpApi.queryInvocations({
       page: page.value,
@@ -41,6 +43,8 @@ async function loadInvocations() {
     page.value = result.page || page.value
     size.value = result.size || size.value
     total.value = result.total || 0
+  } catch (error) {
+    requestError.value = error?.message || '请求失败，请稍后重试'
   } finally {
     loading.value = false
   }
@@ -62,8 +66,16 @@ onMounted(loadInvocations)
 
 <template>
   <el-card shadow="never">
-    <div class="table-scroll">
-    <el-table v-loading="loading" :data="records" border stripe>
+    <el-empty
+      v-if="requestError"
+      :description="requestError"
+      class="table-state"
+    >
+      <el-button type="primary" :loading="loading" @click="loadInvocations">重新加载</el-button>
+    </el-empty>
+
+    <div v-else class="table-scroll">
+    <el-table v-loading="loading" :data="records" border stripe empty-text="暂无调用记录">
       <el-table-column prop="id" label="ID" width="90" />
       <el-table-column prop="traceId" label="traceId" min-width="180" />
       <el-table-column prop="toolName" label="工具名" min-width="160" />
@@ -96,6 +108,7 @@ onMounted(loadInvocations)
     </div>
 
     <el-pagination
+      v-if="!requestError"
       class="pagination"
       background
       layout="total, sizes, prev, pager, next, jumper"
@@ -110,6 +123,10 @@ onMounted(loadInvocations)
 </template>
 
 <style scoped>
+.table-state {
+  min-height: 280px;
+}
+
 .table-scroll {
   width: 100%;
   overflow-x: auto;

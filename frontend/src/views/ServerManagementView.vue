@@ -9,6 +9,7 @@ const servers = ref([])
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
+const requestError = ref('')
 
 const dialogVisible = ref(false)
 const dialogMode = ref('register')
@@ -44,6 +45,7 @@ function statusType(status) {
 /** 加载 Server 分页列表。 */
 async function loadServers() {
   loading.value = true
+  requestError.value = ''
   try {
     const result = await mcpApi.listServers({
       page: page.value,
@@ -53,6 +55,8 @@ async function loadServers() {
     page.value = result.page || page.value
     size.value = result.size || size.value
     total.value = result.total || 0
+  } catch (error) {
+    requestError.value = error?.message || '请求失败，请稍后重试'
   } finally {
     loading.value = false
   }
@@ -157,8 +161,16 @@ onMounted(loadServers)
       <el-button type="primary" @click="openRegister">注册 Server</el-button>
     </div>
 
-    <div class="table-scroll">
-    <el-table v-loading="loading" :data="servers" border stripe>
+    <el-empty
+      v-if="requestError"
+      :description="requestError"
+      class="table-state"
+    >
+      <el-button type="primary" :loading="loading" @click="loadServers">重新加载</el-button>
+    </el-empty>
+
+    <div v-else class="table-scroll">
+    <el-table v-loading="loading" :data="servers" border stripe empty-text="暂无 MCP Server 数据">
       <el-table-column prop="id" label="ID" width="90" />
       <el-table-column prop="serverName" label="服务名称" min-width="160" />
       <el-table-column prop="serverCode" label="编码" min-width="160" />
@@ -189,6 +201,7 @@ onMounted(loadServers)
     </div>
 
     <el-pagination
+      v-if="!requestError"
       class="pagination"
       background
       layout="total, sizes, prev, pager, next, jumper"
@@ -262,6 +275,10 @@ onMounted(loadServers)
 </template>
 
 <style scoped>
+.table-state {
+  min-height: 280px;
+}
+
 .table-scroll {
   width: 100%;
   overflow-x: auto;

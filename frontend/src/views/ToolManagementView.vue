@@ -8,6 +8,7 @@ const tools = ref([])
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
+const requestError = ref('')
 const filters = reactive({
   category: '',
   scope: '',
@@ -29,6 +30,7 @@ function statusType(status) {
 /** 加载工具分页列表。 */
 async function loadTools() {
   loading.value = true
+  requestError.value = ''
   try {
     const result = await mcpApi.queryTools({
       category: filters.category || undefined,
@@ -42,6 +44,8 @@ async function loadTools() {
     page.value = result.page || page.value
     size.value = result.size || size.value
     total.value = result.total || 0
+  } catch (error) {
+    requestError.value = error?.message || '请求失败，请稍后重试'
   } finally {
     loading.value = false
   }
@@ -133,8 +137,16 @@ onMounted(loadTools)
       </el-form-item>
     </el-form>
 
-    <div class="table-scroll">
-    <el-table v-loading="loading" :data="tools" border stripe>
+    <el-empty
+      v-if="requestError"
+      :description="requestError"
+      class="table-state"
+    >
+      <el-button type="primary" :loading="loading" @click="loadTools">重新加载</el-button>
+    </el-empty>
+
+    <div v-else class="table-scroll">
+    <el-table v-loading="loading" :data="tools" border stripe empty-text="暂无符合条件的 MCP 工具">
       <el-table-column prop="id" label="ID" width="90" />
       <el-table-column prop="toolName" label="工具名" min-width="160" />
       <el-table-column prop="displayName" label="展示名" min-width="160" />
@@ -163,6 +175,7 @@ onMounted(loadTools)
     </div>
 
     <el-pagination
+      v-if="!requestError"
       class="pagination"
       background
       layout="total, sizes, prev, pager, next, jumper"
@@ -191,6 +204,10 @@ onMounted(loadTools)
 </template>
 
 <style scoped>
+.table-state {
+  min-height: 280px;
+}
+
 .table-scroll {
   width: 100%;
   overflow-x: auto;

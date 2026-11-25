@@ -1,7 +1,15 @@
 <script setup>
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from './stores/auth'
 
 const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
+
+function logout() {
+  authStore.clearSession()
+  router.replace('/login')
+}
 
 const menuItems = [
   { path: '/servers', label: 'MCP Server' },
@@ -11,7 +19,8 @@ const menuItems = [
 </script>
 
 <template>
-  <el-container class="app-shell">
+  <RouterView v-if="route.meta.public" />
+  <el-container v-else class="app-shell">
     <el-aside width="220px" class="app-sidebar">
       <div class="brand">MCP 管理后台</div>
       <el-menu
@@ -32,6 +41,10 @@ const menuItems = [
     <el-container>
       <el-header class="app-header">
         <span class="page-title">{{ route.name === 'servers' ? 'MCP Server 管理' : route.name === 'tools' ? 'MCP 工具管理' : '调用记录' }}</span>
+        <div class="user-actions">
+          <span>{{ authStore.username }} · {{ authStore.role }}</span>
+          <el-button link @click="logout">退出登录</el-button>
+        </div>
       </el-header>
       <el-main class="app-content">
         <RouterView />
@@ -41,6 +54,13 @@ const menuItems = [
 </template>
 
 <style scoped>
+.user-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #606266;
+}
+
 .app-shell {
   min-height: 100vh;
   background: #f5f7fa;
@@ -69,6 +89,7 @@ const menuItems = [
 .app-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   background: #fff;
   border-bottom: 1px solid #e4e7ed;
 }

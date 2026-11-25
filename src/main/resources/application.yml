@@ -6,6 +6,9 @@ spring:
     driver-class-name: org.postgresql.Driver
 
 mcp:
+  jwt:
+    secret: ${MCP_JWT_SECRET:dev-only-change-this-jwt-secret-at-least-32-bytes}
+    expiration: ${MCP_JWT_EXPIRATION:3600000}
   internal:
     service-key: ${MCP_INTERNAL_SERVICE_KEY:}
     require-service-key: true
@@ -16,6 +19,22 @@ mcp:
     mode: ${MCP_EXECUTION_MODE:http}
     connect-timeout: ${MCP_EXECUTION_CONNECT_TIMEOUT:PT2S}
     call-timeout: ${MCP_EXECUTION_CALL_TIMEOUT:PT10S}
+  cache:
+    server:
+      ttl: ${MCP_CACHE_SERVER_TTL:5m}
+      max-size: ${MCP_CACHE_SERVER_MAX_SIZE:1000}
+    tool:
+      ttl: ${MCP_CACHE_TOOL_TTL:5m}
+      max-size: ${MCP_CACHE_TOOL_MAX_SIZE:1000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

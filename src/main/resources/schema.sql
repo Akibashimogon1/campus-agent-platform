@@ -161,6 +161,24 @@ CREATE TABLE IF NOT EXISTS mcp_invocation (
 
 COMMENT ON TABLE mcp_invocation IS 'MCP工具、资源、提示词调用审计记录';
 
+CREATE TABLE IF NOT EXISTS mcp_user (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    username       VARCHAR(128) NOT NULL,
+    password_hash  VARCHAR(255) NOT NULL,
+    role           VARCHAR(32)  NOT NULL,
+    tenant_id      VARCHAR(64)  NOT NULL,
+    status         VARCHAR(32)  NOT NULL DEFAULT 'ENABLED',
+    deleted        SMALLINT     NOT NULL DEFAULT 0,
+    created_by     VARCHAR(64),
+    updated_by     VARCHAR(64),
+    created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_mcp_user_username_deleted UNIQUE (username, deleted)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_user_tenant
+    ON mcp_user (tenant_id, deleted);
+
 CREATE INDEX IF NOT EXISTS idx_mcp_server_tenant_status ON mcp_server (tenant_id, status) WHERE deleted = 0;
 CREATE INDEX IF NOT EXISTS idx_mcp_server_tenant_health ON mcp_server (tenant_id, health_status) WHERE deleted = 0;
 

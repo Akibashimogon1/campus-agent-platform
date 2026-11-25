@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (JDK 25 / Maven Verify)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Verify backend
+        shell: bash
+        run: |
+          set -o pipefail
+          bash ./mvnw clean verify 2>&1 | tee backend-ci.log
+
+      - name: Print backend failure log
+        if: failure()
+        shell: bash
+        run: |
+          echo "Backend verification failed. Maven output follows:" >&2
+          tail -n 250 backend-ci.log >&2 2>/dev/null || true
+
+  frontend:
+    name: Frontend (Node / npm Build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Restore node_modules cache
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: ${{ runner.os }}-node20-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node20-
+
+      - name: Install and build frontend
+        shell: bash
+        run: |
+          set -o pipefail
+          cd frontend
+          npm ci 2>&1 | tee ../frontend-ci.log
+          npm run build 2>&1 | tee -a ../frontend-ci.log
+
+      - name: Print frontend failure log
+        if: failure()
+        working-directory: frontend
+        shell: bash
+        run: |
+          echo "Frontend build failed. npm output follows:" >&2
+          tail -n 250 ../frontend-ci.log >&2 2>/dev/null || true

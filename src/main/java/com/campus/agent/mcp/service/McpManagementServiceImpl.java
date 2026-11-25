@@ -1,5 +1,6 @@
 package com.campus.agent.mcp.service;
 
+import com.campus.agent.mcp.cache.McpQueryCache;
 import com.campus.agent.mcp.api.McpConnectivityTestResponse;
 import com.campus.agent.mcp.api.McpInvocationResponse;
 import com.campus.agent.mcp.api.McpPageResponse;
@@ -20,6 +21,7 @@ import com.campus.agent.mcp.error.McpErrorCode;
 import com.campus.agent.mcp.mapper.McpInvocationMapper;
 import com.campus.agent.mcp.mapper.McpServerMapper;
 import com.campus.agent.mcp.mapper.McpToolMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
@@ -35,6 +37,7 @@ public class McpManagementServiceImpl implements McpManagementService {
     private final McpInvocationMapper invocationMapper;
     private final TenantContext tenantContext;
     private final McpConnectivityClient connectivityClient;
+    private final McpQueryCache queryCache;
 
     public McpManagementServiceImpl(
             McpServerMapper serverMapper,
@@ -42,11 +45,23 @@ public class McpManagementServiceImpl implements McpManagementService {
             McpInvocationMapper invocationMapper,
             TenantContext tenantContext,
             McpConnectivityClient connectivityClient) {
+        this(serverMapper, toolMapper, invocationMapper, tenantContext, connectivityClient, null);
+    }
+
+    @Autowired
+    public McpManagementServiceImpl(
+            McpServerMapper serverMapper,
+            McpToolMapper toolMapper,
+            McpInvocationMapper invocationMapper,
+            TenantContext tenantContext,
+            McpConnectivityClient connectivityClient,
+            McpQueryCache queryCache) {
         this.serverMapper = serverMapper;
         this.toolMapper = toolMapper;
         this.invocationMapper = invocationMapper;
         this.tenantContext = tenantContext;
         this.connectivityClient = connectivityClient;
+        this.queryCache = queryCache;
     }
 
     @Override
@@ -76,6 +91,7 @@ public class McpManagementServiceImpl implements McpManagementService {
             throw new McpBusinessException(McpErrorCode.RESOURCE_CONFLICT,
                     "Server code already exists for this tenant");
         }
+        invalidateServerCache(tenantId);
         return toServerResponse(server);
     }
 
@@ -90,13 +106,25 @@ public class McpManagementServiceImpl implements McpManagementService {
         int page = request.getPage() == null ? 1 : request.getPage();
         int size = request.getSize() == null ? 20 : request.getSize();
         long offset = (long) (page - 1) * size;
+        String cacheKey = queryCache == null ? null : queryCache.serverKey(
+                tenantId, request.getStatus(), request.getHealthStatus(), page, size);
+        if (cacheKey != null) {
+            McpPageResponse<McpServerResponse> cached = queryCache.getServer(cacheKey, McpPageResponse.class);
+            if (cached != null) {
+                return cached;
+            }
+        }
         long total = serverMapper.countByTenantQuery(tenantId, request.getStatus(), request.getHealthStatus());
         List<McpServerResponse> records = serverMapper.selectPageByTenant(
                         tenantId, request.getStatus(), request.getHealthStatus(), size, offset)
                 .stream()
                 .map(this::toServerResponse)
                 .toList();
-        return new McpPageResponse<>(records, page, size, total);
+        McpPageResponse<McpServerResponse> response = new McpPageResponse<>(records, page, size, total);
+        if (cacheKey != null) {
+            queryCache.putServer(cacheKey, response);
+        }
+        return response;
     }
 
     @Override
@@ -116,6 +144,7 @@ public class McpManagementServiceImpl implements McpManagementService {
         if (updated != 1) {
             throw new McpBusinessException(McpErrorCode.RESOURCE_NOT_FOUND, "MCP Server not found");
         }
+        invalidateServerCache(tenantId);
         return toServerResponse(requireServer(tenantId, serverId));
     }
 
@@ -128,6 +157,8 @@ public class McpManagementServiceImpl implements McpManagementService {
         if (serverMapper.softDeleteByTenant(tenantId, serverId) != 1) {
             throw new McpBusinessException(McpErrorCode.RESOURCE_NOT_FOUND, "MCP Server not found");
         }
+        invalidateServerCache(tenantId);
+        invalidateToolCache(tenantId);
     }
 
     @Override
@@ -136,6 +167,15 @@ public class McpManagementServiceImpl implements McpManagementService {
         int page = request.getPage() == null ? 1 : request.getPage();
         int size = request.getSize() == null ? 20 : request.getSize();
         long offset = (long) (page - 1) * size;
+        String cacheKey = queryCache == null ? null : queryCache.toolKey(
+                tenantId, request.getCategory(), request.getScope(), request.getStatus(),
+                request.getKeyword(), page, size);
+        if (cacheKey != null) {
+            McpPageResponse<McpToolResponse> cached = queryCache.getTool(cacheKey, McpPageResponse.class);
+            if (cached != null) {
+                return cached;
+            }
+        }
         long total = toolMapper.countByTenantQuery(
                 tenantId, request.getCategory(), request.getScope(), request.getStatus(), request.getKeyword());
         List<McpToolResponse> records = toolMapper.selectByTenantQuery(
@@ -144,7 +184,11 @@ public class McpManagementServiceImpl implements McpManagementService {
                 .stream()
                 .map(this::toToolResponse)
                 .toList();
-        return new McpPageResponse<>(records, page, size, total);
+        McpPageResponse<McpToolResponse> response = new McpPageResponse<>(records, page, size, total);
+        if (cacheKey != null) {
+            queryCache.putTool(cacheKey, response);
+        }
+        return response;
     }
 
     @Override
@@ -180,6 +224,7 @@ public class McpManagementServiceImpl implements McpManagementService {
         if (serverMapper.updateHealthByTenant(tenantId, serverId, healthStatus, testedAt, failureReason) != 1) {
             throw new McpBusinessException(McpErrorCode.RESOURCE_NOT_FOUND, "MCP Server not found");
         }
+        invalidateServerCache(tenantId);
         return new McpConnectivityTestResponse(
                 connected,
                 connected ? "CONNECTED" : "UNHEALTHY",
@@ -200,6 +245,7 @@ public class McpManagementServiceImpl implements McpManagementService {
             throw new McpBusinessException(McpErrorCode.RESOURCE_NOT_FOUND, "MCP Tool not found");
         }
         tool.setStatus(request.status());
+        invalidateToolCache(tenantId);
         return toToolResponse(tool);
     }
 
@@ -224,6 +270,18 @@ public class McpManagementServiceImpl implements McpManagementService {
                 .map(this::toInvocationResponse)
                 .toList();
         return new McpPageResponse<>(records, page, size, total);
+    }
+
+    private void invalidateServerCache(String tenantId) {
+        if (queryCache != null) {
+            queryCache.invalidateServerTenant(tenantId);
+        }
+    }
+
+    private void invalidateToolCache(String tenantId) {
+        if (queryCache != null) {
+            queryCache.invalidateToolTenant(tenantId);
+        }
     }
 
     private McpServer requireServer(String tenantId, Long serverId) {

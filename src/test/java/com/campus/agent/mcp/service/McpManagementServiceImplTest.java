@@ -4,7 +4,11 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.campus.agent.mcp.api.McpConnectivityTestResponse;
 import com.campus.agent.mcp.api.McpInvocationResponse;
 import com.campus.agent.mcp.api.McpPageResponse;
+import com.campus.agent.mcp.api.McpServerResponse;
 import com.campus.agent.mcp.api.McpToolResponse;
+import com.campus.agent.mcp.cache.McpCacheProperties;
+import com.campus.agent.mcp.cache.McpQueryCache;
+import com.campus.agent.mcp.dto.McpServerQueryRequest;
 import com.campus.agent.mcp.context.TenantContext;
 import com.campus.agent.mcp.dto.McpInvocationQueryRequest;
 import com.campus.agent.mcp.dto.McpServerRegisterRequest;
@@ -136,6 +140,93 @@ class McpManagementServiceImplTest {
         assertThat(response.size()).isEqualTo(10);
         assertThat(response.total()).isEqualTo(21);
         assertThat(response.records()).extracting(McpToolResponse::toolName).containsExactly("search");
+    }
+
+    @Test
+    void serverPageLoadsOnceThenHitsCache() {
+        AtomicInteger countCalls = new AtomicInteger();
+        AtomicInteger selectCalls = new AtomicInteger();
+        McpServer server = sampleServer(9L);
+        Map<String, Function<Object[], Object>> actions = new HashMap<>();
+        actions.put("countByTenantQuery", arguments -> {
+            countCalls.incrementAndGet();
+            return 1L;
+        });
+        actions.put("selectPageByTenant", arguments -> {
+            selectCalls.incrementAndGet();
+            return List.of(server);
+        });
+        serverMapper = mapperStub(McpServerMapper.class, actions);
+        McpQueryCache queryCache = new McpQueryCache(testCacheProperties());
+        service = new McpManagementServiceImpl(serverMapper, toolMapper, invocationMapper,
+                tenantContext, mcpServer -> { }, queryCache);
+        McpServerQueryRequest request = new McpServerQueryRequest();
+
+        McpPageResponse<McpServerResponse> first = service.queryServers(request);
+        McpPageResponse<McpServerResponse> second = service.queryServers(request);
+
+        assertThat(first.records()).extracting(McpServerResponse::id).containsExactly(9L);
+        assertThat(second.records()).extracting(McpServerResponse::id).containsExactly(9L);
+        assertThat(countCalls).hasValue(1);
+        assertThat(selectCalls).hasValue(1);
+    }
+
+    @Test
+    void serverUpdateInvalidatesTenantServerCache() {
+        AtomicInteger countCalls = new AtomicInteger();
+        McpServer server = sampleServer(9L);
+        Map<String, Function<Object[], Object>> actions = new HashMap<>();
+        actions.put("countByTenantQuery", arguments -> {
+            countCalls.incrementAndGet();
+            return 1L;
+        });
+        actions.put("selectPageByTenant", arguments -> List.of(server));
+        actions.put("selectByTenantAndId", arguments -> server);
+        actions.put("updateConfigurationByTenant", arguments -> 1);
+        serverMapper = mapperStub(McpServerMapper.class, actions);
+        McpQueryCache queryCache = new McpQueryCache(testCacheProperties());
+        service = new McpManagementServiceImpl(serverMapper, toolMapper, invocationMapper,
+                tenantContext, mcpServer -> { }, queryCache);
+        McpServerQueryRequest request = new McpServerQueryRequest();
+
+        service.queryServers(request);
+        McpServerUpdateRequest update = new McpServerUpdateRequest();
+        update.setServerName("Updated orders");
+        update.setTransportType("HTTP_SSE");
+        update.setStatus("ENABLED");
+        service.updateServer(9L, update);
+        service.queryServers(request);
+
+        assertThat(countCalls).hasValue(2);
+    }
+
+    @Test
+    void toolPageLoadsOnceThenHitsCache() {
+        AtomicInteger countCalls = new AtomicInteger();
+        AtomicInteger selectCalls = new AtomicInteger();
+        McpTool tool = sampleTool(12L);
+        Map<String, Function<Object[], Object>> actions = new HashMap<>();
+        actions.put("countByTenantQuery", arguments -> {
+            countCalls.incrementAndGet();
+            return 1L;
+        });
+        actions.put("selectByTenantQuery", arguments -> {
+            selectCalls.incrementAndGet();
+            return List.of(tool);
+        });
+        toolMapper = mapperStub(McpToolMapper.class, actions);
+        McpQueryCache queryCache = new McpQueryCache(testCacheProperties());
+        service = new McpManagementServiceImpl(serverMapper, toolMapper, invocationMapper,
+                tenantContext, mcpServer -> { }, queryCache);
+        McpToolQueryRequest request = new McpToolQueryRequest();
+
+        McpPageResponse<McpToolResponse> first = service.queryTools(request);
+        McpPageResponse<McpToolResponse> second = service.queryTools(request);
+
+        assertThat(first.records()).extracting(McpToolResponse::toolName).containsExactly("search");
+        assertThat(second.records()).extracting(McpToolResponse::toolName).containsExactly("search");
+        assertThat(countCalls).hasValue(1);
+        assertThat(selectCalls).hasValue(1);
     }
 
     @Test
@@ -300,6 +391,13 @@ class McpManagementServiceImplTest {
                 .isInstanceOf(McpBusinessException.class)
                 .extracting(exception -> ((McpBusinessException) exception).getErrorCode())
                 .isEqualTo(McpErrorCode.INVALID_REQUEST);
+    }
+
+    private McpCacheProperties testCacheProperties() {
+        McpCacheProperties properties = new McpCacheProperties();
+        properties.setServer(new McpCacheProperties.CacheSettings(java.time.Duration.ofMinutes(5), 100));
+        properties.setTool(new McpCacheProperties.CacheSettings(java.time.Duration.ofMinutes(5), 100));
+        return properties;
     }
 
     private McpServer sampleServer(Long id) {
